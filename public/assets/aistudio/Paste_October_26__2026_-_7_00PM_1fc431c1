@@ -1,0 +1,798 @@
+A[User / UI Layer (Compose)] -->|Actions| B[ViewModels]
+    B -->|Fetch Catalogs & Streams| C[AddonRepository]
+    C -->|Dynamic Addon URLs| D[AddonApiService (Retrofit)]
+    D -->|HTTP / JSON| E[Stremio Addons e.g., Cinemeta, Torrentio]
+    B -->|Stream URL| F[Media3 ExoPlayer Screen]
+View Diagram
+1. Build Configuration (libs.versions.toml & app/build.gradle.kts)
+gradle/libs.versions.toml
+[versions]
+agp = "9.4.1"
+kotlin = "2.0.21"
+coreKtx = "1.13.1"
+junit = "4.13.2"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
+appcompat = "1.7.0"
+material = "1.12.0"
+composeBom = "2024.12.01"
+lifecycleRuntimeKtx = "2.8.7"
+activityCompose = "1.9.3"
+navigationCompose = "2.8.5"
+retrofit = "2.11.0"
+okhttp = "4.12.0"
+coil = "2.7.0"
+media3 = "1.5.1"
+kotlinxSerialization = "1.7.3"
+
+[libraries]
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
+
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
+app/build.gradle.kts
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+}
+
+android {
+    namespace = "com.example.stremiolite"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.example.stremiolite"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+    buildFeatures {
+        compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.15"
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+dependencies {
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.navigation.compose)
+
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+
+    implementation(libs.coil.compose)
+
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.session)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+2. Stremio Addon Protocol Data Models (model/)
+model/AddonManifest.kt
+package com.example.stremiolite.model
+
+import com.google.gson.annotations.SerializedName
+
+data class AddonManifest(
+    @SerializedName("id") val id: String,
+    @SerializedName("version") val version: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("description") val description: String?,
+    @SerializedName("types") val types: List<String>,
+    @SerializedName("catalogs") val catalogs: List<AddonCatalog>,
+    @SerializedName("resources") val resources: List<String>
+)
+
+data class AddonCatalog(
+    @SerializedName("type") val type: String,
+    @SerializedName("id") val id: String,
+    @SerializedName("name") val name: String?,
+    @SerializedName("extra") val extra: List<CatalogExtra>?
+)
+
+data class CatalogExtra(
+    @SerializedName("name") val name: String,
+    @SerializedName("isRequired") val isRequired: Boolean?,
+    @SerializedName("options") val options: List<String>?
+)
+model/Meta.kt
+package com.example.stremiolite.model
+
+import com.google.gson.annotations.SerializedName
+
+data class CatalogResponse(
+    @SerializedName("metas") val metas: List<MetaItem>
+)
+
+data class MetaDetailResponse(
+    @SerializedName("meta") val meta: MetaItem
+)
+
+data class MetaItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("type") val type: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("poster") val poster: String?,
+    @SerializedName("background") val background: String?,
+    @SerializedName("description") val description: String?,
+    @SerializedName("releaseInfo") val releaseInfo: String?,
+    @SerializedName("genres") val genres: List<String>?,
+    @SerializedName("videos") val videos: List<VideoItem>?
+)
+
+data class VideoItem(
+    @SerializedName("id") val id: String,
+    @SerializedName("title") val title: String?,
+    @SerializedName("season") val season: Int?,
+    @SerializedName("episode") val episode: Int?,
+    @SerializedName("released") val released: String?
+)
+model/Stream.kt
+package com.example.stremiolite.model
+
+import com.google.gson.annotations.SerializedName
+
+data class StreamResponse(
+    @SerializedName("streams") val streams: List<StreamItem>
+)
+
+data class StreamItem(
+    @SerializedName("name") val name: String?,
+    @SerializedName("title") val title: String?,
+    @SerializedName("url") val url: String?,
+    @SerializedName("ytId") val ytId: String?,
+    @SerializedName("behaviorHints") val behaviorHints: BehaviorHints?
+)
+
+data class BehaviorHints(
+    @SerializedName("notWebReady") val notWebReady: Boolean?,
+    @SerializedName("proxyHeaders") val proxyHeaders: Map<String, String>?
+)
+3. Network API Service (network/AddonApiService.kt)
+package com.example.stremiolite.network
+
+import com.example.stremiolite.model.AddonManifest
+import com.example.stremiolite.model.CatalogResponse
+import com.example.stremiolite.model.MetaDetailResponse
+import com.example.stremiolite.model.StreamResponse
+import retrofit2.http.GET
+import retrofit2.http.Url
+
+interface AddonApiService {
+    @GET
+    suspend fun getManifest(@Url url: String): AddonManifest
+
+    @GET
+    suspend fun getCatalog(@Url url: String): CatalogResponse
+
+    @GET
+    suspend fun getMeta(@Url url: String): MetaDetailResponse
+
+    @GET
+    suspend fun getStreams(@Url url: String): StreamResponse
+}
+4. Repository (repository/AddonRepository.kt)
+package com.example.stremiolite.repository
+
+import android.content.Context
+import com.example.stremiolite.model.*
+import com.example.stremiolite.network.AddonApiService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+
+class AddonRepository(context: Context) {
+    private val prefs = context.getSharedPreferences("stremio_lite_prefs", Context.MODE_PRIVATE)
+
+    private val client = OkHttpClient.Builder()
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
+        .build()
+
+    private val retrofit = Retrofit.Builder()
+        .baseUrl("https://v3-cinemeta.strem.io/") // dummy base, overridden by full @Url
+        .client(client)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+
+    private val api = retrofit.create(AddonApiService::class.java)
+
+    // Default built-in addons (Cinemeta for metadata)
+    private val defaultAddons = listOf(
+        "https://v3-cinemeta.strem.io/manifest.json"
+    )
+
+    fun getInstalledAddonUrls(): List<String> {
+        val saved = prefs.getStringSet("installed_addons", null)
+        if (saved.isNullOrEmpty()) {
+            saveInstalledAddons(defaultAddons)
+            return defaultAddons
+        }
+        return saved.toList()
+    }
+
+    fun saveInstalledAddons(urls: List<String>) {
+        prefs.edit().putStringSet("installed_addons", urls.toSet()).apply()
+    }
+
+    suspend fun fetchManifest(baseUrl: String): AddonManifest = withContext(Dispatchers.IO) {
+        val url = if (baseUrl.endsWith("manifest.json")) baseUrl else "$baseUrl/manifest.json"
+        api.getManifest(url)
+    }
+
+    suspend fun fetchCatalog(addonBaseUrl: String, type: String, catalogId: String): List<MetaItem> = withContext(Dispatchers.IO) {
+        try {
+            val base = addonBaseUrl.removeSuffix("/manifest.json")
+            val url = "$base/catalog/$type/$catalogId.json"
+            val response = api.getCatalog(url)
+            response.metas
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    suspend fun fetchMetaDetail(addonBaseUrl: String, type: String, id: String): MetaItem? = withContext(Dispatchers.IO) {
+        try {
+            val base = addonBaseUrl.removeSuffix("/manifest.json")
+            val url = "$base/meta/$type/$id.json"
+            val response = api.getMeta(url)
+            response.meta
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun fetchStreams(addonBaseUrl: String, type: String, id: String): List<StreamItem> = withContext(Dispatchers.IO) {
+        try {
+            val base = addonBaseUrl.removeSuffix("/manifest.json")
+            val url = "$base/stream/$type/$id.json"
+            val response = api.getStreams(url)
+            response.streams
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+}
+5. Main ViewModel (ui/viewmodel/MainViewModel.kt)
+package com.example.stremiolite.ui.viewmodel
+
+import android.app.Application
+import androidx.compose.runtime.*
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.stremiolite.model.AddonManifest
+import com.example.stremiolite.model.MetaItem
+import com.example.stremiolite.repository.AddonRepository
+import kotlinx.coroutines.launch
+
+class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = AddonRepository(application)
+
+    var installedAddonUrls = mutableStateOf(repository.getInstalledAddonUrls())
+        private set
+
+    var manifests = mutableStateMapOf<String, AddonManifest>()
+        private set
+
+    var catalogs = mutableStateMapOf<String, List<MetaItem>>() // Key: "addonUrl_type_catalogId"
+        private set
+
+    var searchQuery = mutableStateOf("")
+    var searchResults = mutableStateOf<List<MetaItem>>(emptyList())
+        private set
+
+    var isLoading = mutableStateOf(false)
+        private set
+
+    init {
+        loadAddonsAndCatalogs()
+    }
+
+    fun loadAddonsAndCatalogs() {
+        viewModelScope.launch {
+            isLoading.value = true
+            val urls = repository.getInstalledAddonUrls()
+            installedAddonUrls.value = urls
+
+            for (url in urls) {
+                try {
+                    val manifest = repository.fetchManifest(url)
+                    manifests[url] = manifest
+
+                    for (cat in manifest.catalogs) {
+                        val items = repository.fetchCatalog(url, cat.type, cat.id)
+                        catalogs["${url}_${cat.type}_${cat.id}"] = items
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            isLoading.value = false
+        }
+    }
+
+    fun addAddon(url: String) {
+        viewModelScope.launch {
+            try {
+                val manifest = repository.fetchManifest(url)
+                val current = installedAddonUrls.value.toMutableList()
+                if (!current.contains(url)) {
+                    current.add(url)
+                    repository.saveInstalledAddons(current)
+                    loadAddonsAndCatalogs()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun removeAddon(url: String) {
+        val current = installedAddonUrls.value.toMutableList()
+        current.remove(url)
+        repository.saveInstalledAddons(current)
+        loadAddonsAndCatalogs()
+    }
+}
+6. Jetpack Compose UI & Navigation (ui/screen/)
+ui/screen/HomeScreen.kt
+package com.example.stremiolite.ui.screen
+
+androidx.compose.runtime.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.example.stremiolite.ui.viewmodel.MainViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(
+    viewModel: MainViewModel,
+    onItemClick: (String, String, String) -> Unit, // addonUrl, type, id
+    onAddonManagerClick: () -> Unit,
+    onSearchClick: () -> Unit
+) {
+    val addonUrls = viewModel.installedAddonUrls.value
+    val manifests = viewModel.manifests
+    val catalogs = viewModel.catalogs
+    val isLoading = viewModel.isLoading.value
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("StremioLite") },
+                actions = {
+                    IconButton(onClick = onSearchClick) {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    }
+                    IconButton(onClick = onAddonManagerClick) {
+                        Icon(Icons.Default.Add, contentDescription = "Addons")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingVertical(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    for (url in addonUrls) {
+                        val manifest = manifests[url] ?: continue
+                        for (cat in manifest.catalogs) {
+                            val items = catalogs["${url}_${cat.type}_${cat.id}"] ?: emptyList()
+                            if (items.isNotEmpty()) {
+                                item(key = "${url}_${cat.type}_${cat.id}") {
+                                    Column {
+                                        Text(
+                                            text = "${manifest.name}: ${cat.name ?: cat.id}",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                        )
+                                        LazyRow(
+                                            contentPadding = PaddingValues(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            items(items, key = { it.id }) { meta ->
+                                                Card(
+                                                    modifier = Modifier
+                                                        .width(130.dp)
+                                                        .height(200.dp)
+                                                        .clickable { onItemClick(url, meta.type, meta.id) },
+                                                    elevation = CardDefaults.cardElevation(4.dp)
+                                                ) {
+                                                    Column(modifier = Modifier.fillMaxSize()) {
+                                                        AsyncImage(
+                                                            model = meta.poster,
+                                                            contentDescription = meta.name,
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(150.dp),
+                                                            contentScale = ContentScale.Crop
+                                                        )
+                                                        Text(
+                                                            text = meta.name,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            maxLines = 2,
+                                                            modifier = Modifier.padding(8.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+ui/screen/DetailScreen.kt
+package com.example.stremiolite.ui.screen
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import com.example.stremiolite.model.MetaItem
+import com.example.stremiolite.model.StreamItem
+import com.example.stremiolite.repository.AddonRepository
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DetailScreen(
+    addonUrl: String,
+    type: String,
+    id: String,
+    repository: AddonRepository,
+    onBack: () -> Unit,
+    onPlayStream: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var meta by remember { mutableStateOf<MetaItem?>(null) }
+    var streams by remember { mutableStateOf<List<StreamItem>>(emptyList()) }
+    var selectedVideoId by remember { mutableStateOf(id) }
+    var isLoadingStreams by remember { mutableStateOf(false) }
+
+    LaunchedEffect(id) {
+        meta = repository.fetchMetaDetail(addonUrl, type, id)
+        loadStreams(addonUrl, type, selectedVideoId, repository) { streams = it }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(meta?.name ?: "Details") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        if (meta == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        AsyncImage(
+                            model = meta!!.poster,
+                            contentDescription = meta!!.name,
+                            modifier = Modifier.width(120.dp).height(180.dp),
+                            contentScale = ContentScale.Crop
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(meta!!.name, style = MaterialTheme.typography.titleLarge)
+                            Text("Year: ${meta!!.releaseInfo ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                            Text(meta!!.description ?: "", style = MaterialTheme.typography.bodySmall, maxLines = 5)
+                        }
+                    }
+                }
+
+                // If Series, show episodes
+                if (!meta!!.videos.isNullOrEmpty()) {
+                    item {
+                        Text("Episodes", style = MaterialTheme.typography.titleMedium)
+                    }
+                    items(meta!!.videos!!) { video ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedVideoId = video.id
+                                    scope.launch {
+                                        isLoadingStreams = true
+                                        streams = repository.fetchStreams(addonUrl, type, video.id)
+                                        isLoadingStreams = false
+                                    }
+                                },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selectedVideoId == video.id) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text(
+                                text = video.title ?: "Episode ${video.episode}",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Text("Available Streams", style = MaterialTheme.typography.titleLarge)
+                }
+
+                if (isLoadingStreams) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                } else if (streams.isEmpty()) {
+                    item {
+                        Text("No streams found for this video.")
+                    }
+                } else {
+                    items(streams) { stream ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                stream.url?.let { onPlayStream(it) }
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(stream.name ?: "Stream", style = MaterialTheme.typography.titleMedium)
+                                    Text(stream.title ?: "", style = MaterialTheme.typography.bodySmall)
+                                }
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Play")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun loadStreams(addonUrl: String, type: String, id: String, repository: AddonRepository, onResult: (List<StreamItem>) -> Unit) {
+    // executed via coroutine in real implementation
+}
+ui/screen/PlayerScreen.kt
+package com.example.stremiolite.ui.screen
+
+import android.net.Uri
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ContextCompat
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+
+@Composable
+fun PlayerScreen(streamUrl: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            val mediaItem = MediaItem.fromUri(Uri.parse(streamUrl))
+            setMediaItem(mediaItem)
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                player = exoPlayer
+            }
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+ui/screen/AddonManagerScreen.kt
+package com.example.stremiolite.ui.screen
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.example.stremiolite.ui.viewmodel.MainViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddonManagerScreen(
+    viewModel: MainViewModel,
+    onBack: () -> Unit
+) {
+    var newAddonUrl by remember { mutableStateOf("") }
+    val addonUrls = viewModel.installedAddonUrls.value
+    val manifests = viewModel.manifests
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Addon Manager") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            OutlinedTextField(
+                value = newAddonUrl,
+                onValueChange = { newAddonUrl = it },
+                label = { Text("Addon Manifest URL (e.g., https://...)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = {
+                    if (newAddonUrl.isNotBlank()) {
+                        viewModel.addAddon(newAddonUrl.trim())
+                        newAddonUrl = ""
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Install Addon")
+            }
+
+            Text("Installed Addons", style = MaterialTheme.typography.titleMedium)
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(addonUrls) { url ->
+                    val manifest = manifests[url]
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(manifest?.name ?: "Loading...", style = MaterialTheme.typography.titleMedium)
+                                Text(url, style = MaterialTheme.typography.bodySmall)
+                                Text(manifest?.description ?: "", style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                            }
+                            IconButton(onClick = { viewModel.removeAddon(url) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

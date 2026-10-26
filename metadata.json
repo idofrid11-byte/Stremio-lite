@@ -1,0 +1,6 @@
+{
+  "name": "StremioLite",
+  "description": "Stream movies and series via modular Stremio addons with rich catalogs, episode selector, and integrated ExoPlayer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
