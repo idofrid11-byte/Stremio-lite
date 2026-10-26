@@ -46,13 +46,15 @@ fun PlayerScreen(
     streamUrl: String,
     title: String,
     subtitle: String,
+    startPositionMs: Long = 0L,
+    onProgressUpdate: ((positionMs: Long, durationMs: Long) -> Unit)? = null,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
 
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
-    var currentPosition by remember { mutableLongStateOf(0L) }
+    var currentPosition by remember { mutableLongStateOf(startPositionMs) }
     var totalDuration by remember { mutableLongStateOf(0L) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var areControlsVisible by remember { mutableStateOf(true) }
@@ -70,6 +72,9 @@ fun PlayerScreen(
                 try {
                     val mediaItem = MediaItem.fromUri(Uri.parse(streamUrl))
                     setMediaItem(mediaItem)
+                    if (startPositionMs > 0L) {
+                        seekTo(startPositionMs)
+                    }
                     prepare()
                     playWhenReady = true
                 } catch (e: Exception) {
@@ -99,6 +104,7 @@ fun PlayerScreen(
                     Player.STATE_ENDED -> {
                         isBuffering = false
                         isPlaying = false
+                        onProgressUpdate?.invoke(exoPlayer.duration, exoPlayer.duration)
                     }
                     Player.STATE_IDLE -> {
                         isBuffering = false
@@ -119,19 +125,25 @@ fun PlayerScreen(
         exoPlayer.addListener(listener)
 
         onDispose {
+            val finalPos = exoPlayer.currentPosition
+            val finalDur = exoPlayer.duration
+            if (finalPos > 0) {
+                onProgressUpdate?.invoke(finalPos, finalDur)
+            }
             exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
 
-    // Track playback position
+    // Track playback position & notify progress
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
             currentPosition = exoPlayer.currentPosition.coerceAtLeast(0L)
             if (exoPlayer.duration > 0) {
                 totalDuration = exoPlayer.duration
             }
-            delay(500)
+            onProgressUpdate?.invoke(currentPosition, totalDuration)
+            delay(1000)
         }
     }
 

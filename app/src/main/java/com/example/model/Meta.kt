@@ -42,8 +42,14 @@ data class VideoItem(
     @SerializedName("episode") val episode: Int? = null,
     @SerializedName("released") val released: String? = null,
     @SerializedName("thumbnail") val thumbnail: String? = null,
+    @SerializedName("image") val image: String? = null,
+    @SerializedName("rating") val rating: Double? = null,
+    @SerializedName("imdbRating") val imdbRating: String? = null,
     @SerializedName("overview") val overview: String? = null
 ) {
+    val displayThumbnail: String?
+        get() = thumbnail ?: image
+
     val displayTitle: String
         get() = title ?: name ?: if (season != null && episode != null) "S${season} E${episode}" else "Episode $id"
 }

@@ -27,10 +27,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.model.ContinueWatchingItem
 import com.example.model.MetaItem
 import com.example.ui.components.MediaCard
 import com.example.ui.theme.CinemaGold
 import com.example.ui.theme.CinemaPrimary
+import com.example.ui.theme.CinemaSecondary
 import com.example.ui.theme.CinemaSurfaceVariant
 import com.example.ui.viewmodel.MainViewModel
 import com.example.ui.viewmodel.Screen
@@ -44,7 +46,9 @@ fun HomeScreen(
     onAddonManagerClick: () -> Unit,
     onSearchClick: () -> Unit,
     onWatchlistClick: () -> Unit,
-    onLogoutClick: (() -> Unit)? = null
+    onLogoutClick: (() -> Unit)? = null,
+    onSettingsClick: (() -> Unit)? = null,
+    onResumeContinueWatching: ((ContinueWatchingItem) -> Unit)? = null
 ) {
     val addonUrls = viewModel.installedAddonUrls
     val manifests = viewModel.manifests
@@ -52,6 +56,7 @@ fun HomeScreen(
     val isLoading = viewModel.isLoading
     val filterType = viewModel.selectedMediaTypeFilter
     val featuredItem = viewModel.featuredItem
+    val continueWatchingList = viewModel.continueWatchingList
 
     Scaffold(
         topBar = {
@@ -100,6 +105,14 @@ fun HomeScreen(
                         modifier = Modifier.testTag("nav_addons_button")
                     ) {
                         Icon(Icons.Outlined.Extension, contentDescription = "Addons")
+                    }
+                    if (onSettingsClick != null) {
+                        IconButton(
+                            onClick = onSettingsClick,
+                            modifier = Modifier.testTag("nav_settings_button")
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
                     }
                     if (onLogoutClick != null) {
                         var showAccountDialog by remember { mutableStateOf(false) }
@@ -224,6 +237,61 @@ fun HomeScreen(
                                         selectedLabelColor = Color.White
                                     )
                                 )
+                            }
+                        }
+                    }
+
+                    // Continue Watching Row
+                    if (continueWatchingList.isNotEmpty()) {
+                        item(key = "continue_watching_section") {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayCircle,
+                                            contentDescription = null,
+                                            tint = CinemaPrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Continue Watching",
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        )
+                                    }
+                                    Text(
+                                        text = "${continueWatchingList.size} in progress",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    items(continueWatchingList, key = { it.id }) { item ->
+                                        ContinueWatchingCard(
+                                            item = item,
+                                            onResume = {
+                                                onResumeContinueWatching?.invoke(item) ?: viewModel.resumeContinueWatching(item)
+                                            },
+                                            onRemove = {
+                                                viewModel.removeContinueWatching(item.id)
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -399,3 +467,131 @@ fun FeaturedHeroBanner(
         }
     }
 }
+
+@Composable
+fun ContinueWatchingCard(
+    item: ContinueWatchingItem,
+    onResume: () -> Unit,
+    onRemove: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(220.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onResume)
+            .testTag("continue_card_${item.id}"),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = CinemaSurfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(124.dp)
+                    .background(Color(0xFF1E1B2E))
+            ) {
+                AsyncImage(
+                    model = item.background ?: item.poster ?: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=300",
+                    contentDescription = item.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+
+                // Dark vignette
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0x66000000),
+                                    Color.Transparent,
+                                    Color(0xBB0A0912)
+                                )
+                            )
+                        )
+                )
+
+                // Play Button Center
+                Surface(
+                    shape = CircleShape,
+                    color = CinemaPrimary.copy(alpha = 0.9f),
+                    modifier = Modifier
+                        .size(38.dp)
+                        .align(Alignment.Center)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Resume",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                // Remove Button Top End
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0x99000000),
+                    modifier = Modifier
+                        .size(26.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-6).dp, y = 6.dp)
+                ) {
+                    IconButton(
+                        onClick = onRemove,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("remove_continue_${item.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+
+                // Progress Bar along bottom edge
+                LinearProgressIndicator(
+                    progress = { item.progressFraction },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .align(Alignment.BottomCenter),
+                    color = CinemaPrimary,
+                    trackColor = Color(0x66000000),
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = item.displaySubtitle,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+

@@ -331,72 +331,16 @@ fun DetailScreen(
 
                             // Episode Cards
                             val currentEpisodes = meta.videos.filter { it.season == null || it.season == selectedSeason }
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 currentEpisodes.forEach { video ->
                                     val isSelected = video.id == selectedEpisodeId
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                viewModel.selectEpisode(meta.type, video)
-                                            }
-                                            .testTag("episode_card_${video.id}"),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (isSelected) CinemaPrimary.copy(alpha = 0.2f) else CinemaSurfaceVariant
-                                        ),
-                                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, CinemaPrimary) else null
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(12.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = if (isSelected) CinemaPrimary else Color(0x33FFFFFF),
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Text(
-                                                        text = "${video.episode ?: 1}",
-                                                        style = MaterialTheme.typography.labelMedium.copy(
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Color.White
-                                                        )
-                                                    )
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.width(12.dp))
-
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = video.displayTitle,
-                                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                                    )
-                                                )
-                                                if (!video.released.isNullOrBlank()) {
-                                                    Text(
-                                                        text = video.released,
-                                                        style = MaterialTheme.typography.labelSmall.copy(
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                        )
-                                                    )
-                                                }
-                                            }
-
-                                            if (isSelected) {
-                                                Icon(
-                                                    imageVector = Icons.Default.PlayCircle,
-                                                    contentDescription = "Selected",
-                                                    tint = CinemaPrimary,
-                                                    modifier = Modifier.size(24.dp)
-                                                )
-                                            }
+                                    EpisodeCardItem(
+                                        video = video,
+                                        isSelected = isSelected,
+                                        onSelect = {
+                                            viewModel.selectEpisode(meta.type, video)
                                         }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -508,7 +452,15 @@ fun DetailScreen(
                                         stream = stream,
                                         index = index,
                                         onClick = {
-                                            onPlayStream(stream, meta.name)
+                                            val currentVideo = meta.videos?.firstOrNull { it.id == selectedEpisodeId }
+                                            val displayTitle = if (currentVideo != null) "${meta.name}: ${currentVideo.displayTitle}" else meta.name
+                                            viewModel.playStream(
+                                                stream = stream,
+                                                title = displayTitle,
+                                                meta = meta,
+                                                addonUrl = addonUrl,
+                                                video = currentVideo
+                                            )
                                         }
                                     )
                                 }
@@ -612,3 +564,141 @@ fun StreamCard(
         }
     }
 }
+
+@Composable
+fun EpisodeCardItem(
+    video: VideoItem,
+    isSelected: Boolean,
+    onSelect: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onSelect)
+            .border(
+                1.dp,
+                if (isSelected) CinemaPrimary else Color(0x22FFFFFF),
+                RoundedCornerShape(12.dp)
+            )
+            .testTag("episode_card_${video.id}"),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) CinemaPrimary.copy(alpha = 0.2f) else CinemaSurfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Episode Thumbnail with fallback
+            Box(
+                modifier = Modifier
+                    .width(115.dp)
+                    .height(68.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF1E1B2E))
+            ) {
+                AsyncImage(
+                    model = video.displayThumbnail ?: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=300",
+                    contentDescription = video.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+
+                // Episode indicator pill in thumbnail corner
+                Surface(
+                    color = if (isSelected) CinemaPrimary else Color(0xDD000000),
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .align(Alignment.BottomStart)
+                ) {
+                    Text(
+                        text = "E${video.episode ?: 1}",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        ),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "S${video.season ?: 1} E${video.episode ?: 1}: ${video.title ?: video.name ?: "Episode"}",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = Color.White
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                // IMDb Rating & Release Date
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val ratingText = video.imdbRating ?: video.rating?.let { String.format("%.1f", it) }
+                    if (ratingText != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Rating",
+                                modifier = Modifier.size(13.dp),
+                                tint = CinemaGold
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = ratingText,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = CinemaGold,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
+                    }
+                    if (!video.released.isNullOrEmpty()) {
+                        Text(
+                            text = video.released.take(10),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (!video.overview.isNullOrBlank()) {
+                    Text(
+                        text = video.overview,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 10.sp
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.PlayCircle,
+                    contentDescription = "Selected",
+                    tint = CinemaPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+

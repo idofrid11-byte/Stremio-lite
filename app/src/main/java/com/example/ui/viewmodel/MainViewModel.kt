@@ -16,18 +16,30 @@ sealed class Screen {
     object Search : Screen()
     object Watchlist : Screen()
     object AddonManager : Screen()
+    object Settings : Screen()
     data class Detail(val addonUrl: String, val type: String, val id: String) : Screen()
-    data class Player(val streamUrl: String, val title: String, val subtitle: String) : Screen()
+    data class Player(
+        val streamUrl: String,
+        val title: String,
+        val subtitle: String,
+        val startPositionMs: Long = 0L,
+        val continueWatchingItem: ContinueWatchingItem? = null
+    ) : Screen()
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     val repository = AddonRepository(application)
+    val continueWatchingRepository = com.example.repository.ContinueWatchingRepository(application)
 
     // Navigation Stack
     var currentScreen by mutableStateOf<Screen>(Screen.Home)
         private set
 
     private val screenStack = mutableListOf<Screen>(Screen.Home)
+
+    // Continue Watching State
+    var continueWatchingList by mutableStateOf(continueWatchingRepository.getContinueWatchingList())
+        private set
 
     // Data State
     var installedAddonUrls by mutableStateOf(repository.getInstalledAddonUrls())
@@ -280,9 +292,70 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun playStream(stream: StreamItem, title: String) {
+    fun playStream(
+        stream: StreamItem,
+        title: String,
+        meta: MetaItem? = null,
+        addonUrl: String? = null,
+        video: VideoItem? = null,
+        startPositionMs: Long = 0L
+    ) {
         val streamUrl = stream.url ?: return
-        navigateTo(Screen.Player(streamUrl = streamUrl, title = title, subtitle = stream.displaySubtitle))
+        val continueItem = if (meta != null && addonUrl != null) {
+            val uniqueId = if (video != null) "${meta.id}:${video.season}:${video.episode}" else meta.id
+            ContinueWatchingItem(
+                id = uniqueId,
+                metaId = meta.id,
+                addonUrl = addonUrl,
+                type = meta.type,
+                title = meta.name,
+                episodeTitle = video?.displayTitle,
+                poster = meta.poster,
+                background = meta.background,
+                season = video?.season,
+                episode = video?.episode,
+                streamUrl = streamUrl,
+                positionMs = startPositionMs,
+                durationMs = 0L
+            )
+        } else null
+
+        navigateTo(
+            Screen.Player(
+                streamUrl = streamUrl,
+                title = title,
+                subtitle = stream.displaySubtitle,
+                startPositionMs = startPositionMs,
+                continueWatchingItem = continueItem
+            )
+        )
+    }
+
+    fun savePlaybackProgress(item: ContinueWatchingItem?, positionMs: Long, durationMs: Long) {
+        if (item == null) return
+        continueWatchingRepository.saveProgress(item.copy(positionMs = positionMs, durationMs = durationMs))
+        continueWatchingList = continueWatchingRepository.getContinueWatchingList()
+    }
+
+    fun removeContinueWatching(id: String) {
+        continueWatchingRepository.removeItem(id)
+        continueWatchingList = continueWatchingRepository.getContinueWatchingList()
+    }
+
+    fun resumeContinueWatching(item: ContinueWatchingItem) {
+        navigateTo(
+            Screen.Player(
+                streamUrl = item.streamUrl,
+                title = if (item.episodeTitle != null) "${item.title}: ${item.episodeTitle}" else item.title,
+                subtitle = item.displaySubtitle,
+                startPositionMs = item.positionMs,
+                continueWatchingItem = item
+            )
+        )
+    }
+
+    fun refreshContinueWatching() {
+        continueWatchingList = continueWatchingRepository.getContinueWatchingList()
     }
 
     fun toggleWatchlist(meta: MetaItem) {

@@ -53,4 +53,46 @@ class ExampleRobolectricTest {
     assertTrue(loginResult.isSuccess)
     assertTrue(authRepo.isLoggedIn())
   }
+
+  @Test
+  fun `verify settings repository default and updated values`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val settingsRepo = com.example.repository.SettingsRepository(context)
+
+    assertEquals(1.0f, settingsRepo.defaultPlaybackSpeed, 0.01f)
+    assertTrue(settingsRepo.autoPlayNextEpisode)
+    assertTrue(settingsRepo.hardwareDecoding)
+
+    settingsRepo.defaultPlaybackSpeed = 1.25f
+    assertEquals(1.25f, settingsRepo.defaultPlaybackSpeed, 0.01f)
+
+    settingsRepo.autoPlayNextEpisode = false
+    org.junit.Assert.assertFalse(settingsRepo.autoPlayNextEpisode)
+  }
+
+  @Test
+  fun `verify continue watching repository save progress and remove`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val continueRepo = com.example.repository.ContinueWatchingRepository(context)
+
+    val item = com.example.model.ContinueWatchingItem(
+        id = "movie123",
+        metaId = "movie123",
+        addonUrl = "https://v3-cinemeta.strem.io/manifest.json",
+        title = "Inception",
+        streamUrl = "https://example.com/stream.mp4",
+        positionMs = 120000L,
+        durationMs = 600000L
+    )
+
+    continueRepo.saveProgress(item)
+    val list = continueRepo.getContinueWatchingList()
+    assertTrue(list.isNotEmpty())
+    assertEquals("Inception", list.first().title)
+    assertEquals(0.2f, list.first().progressFraction, 0.01f)
+
+    continueRepo.removeItem("movie123")
+    val emptyList = continueRepo.getContinueWatchingList()
+    assertTrue(emptyList.isEmpty())
+  }
 }

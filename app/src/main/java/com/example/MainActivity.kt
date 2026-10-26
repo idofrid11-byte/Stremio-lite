@@ -6,8 +6,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.repository.SettingsRepository
 import com.example.ui.screen.*
 import com.example.ui.theme.CinemaBlack
 import com.example.ui.theme.StremioTheme
@@ -28,6 +30,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val authViewModel: AuthViewModel = viewModel()
                     val mainViewModel: MainViewModel = viewModel()
+                    val settingsRepository = remember { SettingsRepository(applicationContext) }
 
                     val isLoggedIn = authViewModel.isLoggedIn.value
 
@@ -53,6 +56,12 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onLogoutClick = {
                                         authViewModel.logout()
+                                    },
+                                    onSettingsClick = {
+                                        mainViewModel.navigateTo(Screen.Settings)
+                                    },
+                                    onResumeContinueWatching = { item ->
+                                        mainViewModel.resumeContinueWatching(item)
                                     }
                                 )
                             }
@@ -76,7 +85,14 @@ class MainActivity : ComponentActivity() {
                                     streamUrl = screen.streamUrl,
                                     title = screen.title,
                                     subtitle = screen.subtitle,
-                                    onBack = { mainViewModel.navigateBack() }
+                                    startPositionMs = screen.startPositionMs,
+                                    onProgressUpdate = { pos, dur ->
+                                        mainViewModel.savePlaybackProgress(screen.continueWatchingItem, pos, dur)
+                                    },
+                                    onBack = {
+                                        mainViewModel.refreshContinueWatching()
+                                        mainViewModel.navigateBack()
+                                    }
                                 )
                             }
                             is Screen.Search -> {
@@ -104,6 +120,18 @@ class MainActivity : ComponentActivity() {
                                 AddonManagerScreen(
                                     viewModel = mainViewModel,
                                     onBack = { mainViewModel.navigateBack() }
+                                )
+                            }
+                            is Screen.Settings -> {
+                                ExpandedSettingsScreen(
+                                    authViewModel = authViewModel,
+                                    settingsRepository = settingsRepository,
+                                    onNavigateToAddons = {
+                                        mainViewModel.navigateTo(Screen.AddonManager)
+                                    },
+                                    onBack = {
+                                        mainViewModel.navigateBack()
+                                    }
                                 )
                             }
                         }
